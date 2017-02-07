@@ -1181,27 +1181,27 @@ func (cli *DockerCli) CmdPush(args ...string) error {
 }
 
 func (cli *DockerCli) CmdPull(args ...string) error {
-	cmd := cli.Subcmd("pull", "NAME[:TAG]", "Pull an image or a repository from the registry")
-	tag := cmd.String([]string{"#t", "#-tag"}, "", "Download tagged image in a repository")
-	if err := cmd.Parse(args); err != nil {
-		return nil
+	cmd := cli.Subcmd("pull", "NAME[:TAG]", "Pull an image or a repository from the registry")  //通过cli包中的Subcmd方法定义一个类型为Flagset的对象cmd
+	tag := cmd.String([]string{"#t", "#-tag"}, "", "Download tagged image in a repository")    //给cmd对象定义一个类型为String的flag，名为”#t”或”#-tag”，初始值为空
+	if err := cmd.Parse(args); err != nil {   // 将args参数进行解析，解析过程中，先提取出是否有符合tag这个flag的参数
+		return nil    //若有，将其给赋值给tag参数，其余的参数存入cmd.NArg();若无的话，所有的参数存入cmd.NArg()中。
 	}
-
+//判断经过flag解析后的参数列表，若参数列表中参数的个数不为1，则说明需要pull多个image，pull命令不支持，则调用错误处理方法cmd.Usage()，并返回nil
 	if cmd.NArg() != 1 {
 		cmd.Usage()
 		return nil
 	}
 	var (
-		v      = url.Values{}
-		remote = cmd.Arg(0)
+		v      = url.Values{}  //创建一个map类型的变量v，该变量用于存放pull镜像时所需的url参数
+		remote = cmd.Arg(0)  //随后将参数列表的第一个值赋给remote变量
 	)
 
-	v.Set("fromImage", remote)
+	v.Set("fromImage", remote)//将remote作为键为fromImage的值添加至v
 
 	if *tag == "" {
-		v.Set("tag", *tag)
+		v.Set("tag", *tag)  //最后若有tag信息的话，将tag信息作为键为”tag”的值添加至v。
 	}
-
+//通过remote变量解析出镜像所在的host地址，以及镜像的名称
 	remote, _ = parsers.ParseRepositoryTag(remote)
 	// Resolve the Repository name from fqn to hostname + name
 	hostname, _, err := registry.ResolveRepositoryName(remote)
@@ -1209,11 +1209,11 @@ func (cli *DockerCli) CmdPull(args ...string) error {
 		return err
 	}
 
-	cli.LoadConfigFile()
+	cli.LoadConfigFile()//通过cli对象获取与Docker Server通信所需要的认证配置信息
 
 	// Resolve the Auth config relevant for this server
 	authConfig := cli.configFile.ResolveAuthConfig(hostname)
-
+//定义一个名为pull的函数，传入的参数类型为registry.AuthConfig，返回类型为error。
 	pull := func(authConfig registry.AuthConfig) error {
 		buf, err := json.Marshal(authConfig)
 		if err != nil {
@@ -1222,14 +1222,16 @@ func (cli *DockerCli) CmdPull(args ...string) error {
 		registryAuthHeader := []string{
 			base64.URLEncoding.EncodeToString(buf),
 		}
-
+//该部分具体发起了一个给Docker Server的POST请求
+//请求的url为"/images/create?"+v.Encode()
+//请求的认证信息为：map[string][]string{"X-Registry-Auth": registryAuthHeader,}
 		return cli.stream("POST", "/images/create?"+v.Encode(), nil, cli.out, map[string][]string{
 			"X-Registry-Auth": registryAuthHeader,
 		})
 	}
-
+//具体调用执行pull函数，若成功则最终返回，若返回错误，则做相应的错误处理。
 	if err := pull(authConfig); err != nil {
-		if strings.Contains(err.Error(), "Status 401") {
+		if strings.Contains(err.Error(), "Status 401") {//若返回错误为401，则需要先登录，转至登录环节，完成之后，继续执行pull函数，若完成则最终返回
 			fmt.Fprintln(cli.out, "\nPlease login prior to pull:")
 			if err := cli.CmdLogin(hostname); err != nil {
 				return err

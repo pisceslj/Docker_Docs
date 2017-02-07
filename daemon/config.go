@@ -18,20 +18,20 @@ const (
 // to the docker daemon when you launch it with say: `docker -d -e lxc`
 // FIXME: separate runtime configuration from http api configuration
 type Config struct {
-	Pidfile                     string
-	Root                        string
-	AutoRestart                 bool
-	Dns                         []string
-	DnsSearch                   []string
-	EnableIptables              bool
-	EnableIpForward             bool
-	DefaultIp                   net.IP
-	BridgeIface                 string
-	BridgeIP                    string
-	InterContainerCommunication bool
-	GraphDriver                 string
-	GraphOptions                []string
-	ExecDriver                  string
+	Pidfile                     string     //docker daemon 所属进程的PID
+	Root                        string     //docker运行时所使用root路径
+	AutoRestart                 bool       //已被启用，支持docker run时的重启
+	Dns                         []string   //docker 使用的DNS Server地址
+	DnsSearch                   []string   //docker 使用的指定的DNS查找域名
+	EnableIptables              bool       //启用iptables功能
+	EnableIpForward             bool       //启用net.ipv4.ip_forward功能
+	DefaultIp                   net.IP     //绑定容器端口时使用的默认IP
+	BridgeIface                 string     //添加容器网络至已有的网桥
+	BridgeIP                    string     //创建网桥的IP地址
+	InterContainerCommunication bool       //是否允许相同host上容器间的通信
+	GraphDriver                 string     //Docker运行时使用的特定存储驱动
+	GraphOptions                []string   //可设置的存储驱动选项
+	ExecDriver                  string     //Docker运行时使用的特定exec驱动
 	Mtu                         int
 	DisableNetwork              bool
 	EnableSelinuxSupport        bool

@@ -20,12 +20,17 @@ const CanDaemon = true
 var (
 	daemonCfg = &daemon.Config{}
 )
-
+//关于Docker Daemon所需要的config配置信息均已经初始化完毕
 func init() {
 	daemonCfg.InstallFlags()
 }
 
 func mainDaemon() {
+	/*
+	第一个步骤即flag参数的检查。具体而言，即当docker命令经过flag参数解析之后，判断剩余的参数是否为0。
+	若为0，则说明Docker Daemon的启动命令无误，正常运行；
+	若不为0，则说明在启动Docker Daemon的时候，传入了多余的参数，此时会输出错误提示，并退出运行程序。
+	 */
 	if flag.NArg() != 0 {
 		flag.Usage()
 		return
