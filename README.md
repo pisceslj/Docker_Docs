@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 Docker: the Linux container engine
 ==================================
 
@@ -203,3 +204,7 @@ Licensing
 =========
 Docker is licensed under the Apache License, Version 2.0. See LICENSE for full license text.
 
+=======
+# Docker_Docs
+Some collected resources about Docker
+>>>>>>> f9e3c71f7f279cb94c4335efaa41e42e189a173d
