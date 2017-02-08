@@ -1,4 +1,4 @@
-对象    // +build daemon
+// +build daemon
 
 package main
 
@@ -35,7 +35,7 @@ func mainDaemon() {
 		flag.Usage()
 		return
 	}
-	eng := engine.New()   //创建	
+	eng := engine.New()   //创建engine	
 	signal.Trap(eng.Shutdown)
 	// Load builtins
 	if err := builtins.Register(eng); err != nil {
