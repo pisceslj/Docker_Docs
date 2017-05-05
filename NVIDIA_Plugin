@@ -1,0 +1,65 @@
+因为GPU属于特定的厂商产品，需要特定的driver，Docker本身并不支持GPU。以前如果要在Docker中使用GPU，就需要在container中安装主机上使用GPU的driver，然后把主机上的GPU设备（例如：/dev/nvidia0）映射到container中。所以这样的Docker image并不具备可移植性。
+
+Nvidia-docker项目就是为了解决这个问题，它让Docker image不需要知道底层GPU的相关信息，而是通过启动container时mount设备和驱动文件来实现的。
+
+从源码编译安装nvidia-docker（如果需要设置代理，请参考这个issue）：
+
+# go get -d github.com/NVIDIA/nvidia-docker
+# cd $GOPATH/src/github.com/NVIDIA/nvidia-docker
+# make install
+其实从nvidia-docker的main函数来看：
+
+func main() {
+    args := os.Args[1:]
+    defer exit()
+
+    assert(LoadEnvironment())
+
+    command, off, err := docker.ParseArgs(args)
+    assert(err)
+
+    if command != "create" && command != "run" {
+        if command == "version" {
+            fmt.Printf("NVIDIA Docker: %s\n\n", Version)
+        }
+        assert(docker.Docker(args...))
+    }
+
+    opt, i, err := docker.ParseArgs(args[off+1:], command)
+    assert(err)
+    off += i + 1
+
+    if (command == "create" || command == "run") && opt != "" {
+        vols, err := VolumesNeeded(opt)
+        assert(err)
+
+        if vols != nil {
+            var nargs []string
+            var err error
+
+            if Host != nil {
+                nargs, err = GenerateRemoteArgs(opt, vols)
+            } else {
+                assert(nvidia.LoadUVM())
+                assert(nvidia.Init())
+                nargs, err = GenerateLocalArgs(opt, vols)
+                nvidia.Shutdown()
+            }
+            assert(err)
+            args = append(args[:off], append(nargs, args[off:]...)...)
+        }
+    }
+
+    assert(docker.Docker(args...))
+}
+除了create和run命令以外，其它的命令还是由本机的docker来处理。
+
+此外，nvidia-docker还提供了使用plug-in模式（参考Internals）：
+
+$ curl -s http://localhost:3476/docker/cli --device=/dev/nvidiactl --device=/dev/nvidia-uvm --device=/dev/nvidia3 --device=/dev/nvidia2 --device=/dev/nvidia1 --device=/dev/nvidia0 --volume-driver=nvidia-docker --volume=nvidia_driver_361.48:/usr/local/nvidia:ro
+$ docker run -ti --rm `curl -s http://localhost:3476/docker/cli` nvidia/cuda nvidia-smi
+这种方式则无需使用nvidia-docker，而可以直接使用docker。然而这种方式不会检查image和nvidia driver是否兼容。
+
+还有一种方式是使用Nvidia提供的用Go实现的package。
+参考资料：
+Why NVIDIA Docker。
