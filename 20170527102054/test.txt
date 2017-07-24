@@ -1,0 +1,309 @@
+Build Docker From Scratch
+
+
+ 
+
+Contents [hide]
+1 Overview
+2 Requirement
+3 Platform
+4 Source Code
+5 Build Kernel
+6 Build Docker
+7 Test
+ 
+
+[edit] Overview 
+
+It is a POC project to add resource control for intel GPU. 
+
+[edit] Requirement 
+CONFIG_CGROUP_GPU is enabled in the host kernel. 
+GPU resource control in cgroup is supported in moby. 
+GPU resource control in cgroup is supported in CLI. 
+GPU resource control in cgroup is supported in runC. 
+
+[edit] Platform 
+
+Currently it has been test under following platform 
+
+Software 
+OS: ubuntu 16.04x64 
+
+Hardware 
+Broadwell-U 
+
+[edit] Source Code 
+
+Linux Kernel source https://github.com/zhenyw/linux.git (gpu-cgroup branch) 
+
+Docker server source https://github.com/zhenyw/moby.git (gpu-cgroup branch) 
+
+Docker Client source https://github.com/zhenyw/cli.git (gpu-cgroup branch) 
+
+RunC source https://github.com/zhenyw/runc.git (gpu-cgroup branch) 
+
+[edit] Build Kernel 
+
+1. Download the kernel source
+
+ # cd /home
+ # git clone https://github.com/zhenyw/linux.git
+ # cd linux
+ # git checkout gpu-cgroup
+
+
+
+2. Set up the kernel configuration
+
+
+2.1 Duplicate the kernel config from current system
+
+
+The config file is stored somewhere in the directory "/boot/".
+
+
+There might be several files that start with config, find the config file by running command “uname -a” and find the config file that ends with the kernel version number. 
+
+
+Copy that file into the kernel source directory as .config. Or just run this command:
+
+ # cp /boot/config-`uname -r`* .config
+
+
+If copy operation failed with command above, kernel on your system must have been updated after OS fresh installation. 
+
+Find out the original config file that comes with OS fresh installation and copy that file into the kernel source directory as .config 
+
+2.2 Build new kernel config prototype from old kernel config
+
+
+Run command below to update current config utilising a provided .config as base and sets new symbols to their default value
+
+ # make olddefconfig
+
+
+2.3 Manually configure the new kernel config
+Make sure the option "CONFIG_CGROUP_GPU" is enabled, modify the line below in file ".config" 
+ # CONFIG_CGROUP_GPU is not set
+ CONFIG_CGROUP_GPU=y
+
+
+Make sure the requirement of docker is satisfied, run command below to check the requirement 
+ # cd /home/linux
+ # wget https://raw.githubusercontent.com/moby/moby/master/contrib/check-config.sh
+ # chmod +x check-config.sh
+ # ./check-config.sh .config
+
+
+Make sure that necessary configure options are all enabled, or modify the config file(or "make menuconfig") to fit the requirement. 
+ # ./check-config.sh .config 
+ info: reading kernel config from .config ...
+  
+ Generally Necessary:
+ - cgroup hierarchy: properly mounted [/sys/fs/cgroup]
+ - CONFIG_NAMESPACES: enabled
+ - CONFIG_NET_NS: enabled
+ - CONFIG_PID_NS: enabled
+ - CONFIG_IPC_NS: enabled
+ - CONFIG_UTS_NS: enabled
+ - CONFIG_CGROUPS: enabled
+ - CONFIG_CGROUP_CPUACCT: enabled
+ - CONFIG_CGROUP_DEVICE: enabled
+ - CONFIG_CGROUP_FREEZER: enabled
+ - CONFIG_CGROUP_SCHED: enabled
+ - CONFIG_CPUSETS: enabled
+ - CONFIG_MEMCG: enabled
+ - CONFIG_KEYS: enabled
+ - CONFIG_VETH: enabled (as module)
+ - CONFIG_BRIDGE: enabled (as module)
+ - CONFIG_BRIDGE_NETFILTER: enabled (as module)
+ - CONFIG_NF_NAT_IPV4: enabled (as module)
+ - CONFIG_IP_NF_FILTER: enabled
+ - CONFIG_IP_NF_TARGET_MASQUERADE: enabled (as module)
+ - CONFIG_NETFILTER_XT_MATCH_ADDRTYPE: enabled (as module)
+ - CONFIG_NETFILTER_XT_MATCH_CONNTRACK: enabled
+ - CONFIG_NETFILTER_XT_MATCH_IPVS: enabled (as module)
+ - CONFIG_IP_NF_NAT: enabled (as module)
+ - CONFIG_NF_NAT: enabled (as module)
+ - CONFIG_NF_NAT_NEEDED: enabled
+ - CONFIG_POSIX_MQUEUE: enabled
+
+
+
+3. Compile the kernel from source code
+ Run command below to compile the kernel 
+ # cd /home/linux/
+ # make
+
+
+The linux kernel binary will be built as follows 
+ /home/linux/arch/x86_64/boot/bzImage
+
+
+
+4. Install the kernel modules
+ Run command below to install modules to "/lib/modules/X.Y.Z/" (where X.Y.Z is something like 4.11.0-rc7+) 
+ # cd /home/linux/
+ # make modules_install
+
+
+
+5. Install the kernel
+ Run command below to install the kernel to "/boot/" 
+ # cd /home/linux/
+ # cp arch/x86_64/boot/bzImage /boot/vmlinuz-gpu-cgroup
+
+
+
+6. Install the ramdisk
+
+ # cd /home/linux/
+ # version=$(cat include/config/kernel.release)
+ # mkinitramfs -o /boot/initrd-gpu-cgroup.img -v $(ls /lib/modules |grep $version)
+
+
+
+7. Update the bootloader configuration file
+ On Ubuntu, update the file “/boot/grub/grub.cfg”, make sure the kernel("/boot/vmlinuz-gpu-cgroup") and ramdisk("/boot/initrd-gpu-cgroup.img") built above are all used during bootup. 
+
+[edit] Build Docker 
+
+1. Download the docker source
+
+ # cd /home/
+ # git clone https://github.com/zhenyw/moby.git
+ # cd moby
+ # git checkout gpu-cgroup
+
+
+
+2. Update the Dockerfile
+
+
+Save the Dockerfile patch listed below as "Dockerfile.patch", and place it in the root directory of docker 
+--- Dockerfile.orig	2017-05-11 08:38:23.888649044 +0800
++++ Dockerfile	2017-05-11 08:39:11.016647956 +0800
+@@ -27,7 +27,14 @@
+ 
+ # allow replacing httpredir or deb mirror
+ ARG APT_MIRROR=deb.debian.org
+-RUN sed -ri "s/(httpredir|deb).debian.org/$APT_MIRROR/g" /etc/apt/sources.list
++RUN sed -ri "s/(httpredir|deb).debian.org/linux-ftp.jf.intel.com\/pub\/mirrors/g" /etc/apt/sources.list
++ 
++ENV http_proxy "http://proxy-shz.intel.com:911/"
++ENV https_proxy "https://proxy-shz.intel.com:911/"
++ENV ftp_proxy "http://proxy-shz.intel.com:911/"
++ENV no_proxy "localhost,127.0.0.1,.intel.com"
++ 
++RUN apt-get clean
+ 
+ # Add zfs ppa
+ COPY keys/launchpad-ppa-zfs.asc /go/src/github.com/docker/docker/keys/
+@@ -235,7 +242,6 @@
+ # Get useful and necessary Hub images so we can "docker load" locally instead of pulling
+ COPY contrib/download-frozen-image-v2.sh /go/src/github.com/docker/docker/contrib/
+ RUN ./contrib/download-frozen-image-v2.sh /docker-frozen-images \
+-	buildpack-deps:jessie@sha256:85b379ec16065e4fe4127eb1c5fb1bcc03c559bd36dbb2e22ff496de55925fa6 \
+ 	busybox:latest@sha256:32f093055929dbc23dec4d03e09dfe971f5973a9ca5cf059cbfb644c206aa83f \
+ 	debian:jessie@sha256:72f784399fd2719b4cb4e16ef8e369a39dc67f53d978cd3e2e7bf4e502c7b793 \
+ 	hello-world:latest@sha256:c5515758d4c5e1e838e9cd307f6c6a0d620b5e07e6f927b07d05f6d12a1ac8d7
+
+
+Actually following parts are modified for Dockerfile 
+ apt source is updated for intel internal, and “apt-get clean” is run before compiling docker 
+ http proxy is updated for intel internal 
+ “buildpack-deps:jessie@sha256:85b379ec16065e4fe4127eb1c5fb1bcc03c559bd36dbb2e22ff496de55925fa6” is omitted as it failed to be downloaded. 
+
+Doing the patch work as following: 
+ # cd /home/moby
+ # patch -p0 Dockerfile < ./Dockerfile.patch
+
+
+
+3. Update the DNS server on host
+ During the compile process of docker, the DNS server used in container is copied from host, so update the DNS server on host firstly Modify the contents in “/etc/resolv.conf” as following 
+# cat /etc/resolv.conf 
+nameserver 192.168.79.3
+nameserver 10.248.2.5
+nameserver 10.239.27.228
+nameserver 127.0.1.1
+
+
+
+4. Compile the docker from source code
+
+ # cd /home/moby
+ # make build
+ # make cross
+
+The docker server binary will be built as follows 
+ For dynbinary:           /home/moby/bundles/17.06.0-dev/dynbinary-daemon/dockerd
+ For binary:              /home/moby/bundles/17.06.0-dev/binary-daemon/dockerd
+
+The docker client binary will be built as follows 
+ /home/moby/bundles/17.06.0-dev/binary-daemon/docker
+
+The runc binary will be built as follows 
+ /home/moby/bundles/17.06.0-dev/binary-daemon/docker-runc
+
+
+
+5. Update docker related
+ Copy the docker related binary to "/usr/bin" on host, don't forget to backup the original files. 
+ # cp /home/moby/bundles/17.06.0-dev/binary-daemon/docker-runc /usr/bin/docker-runc
+ # cp /home/moby/bundles/17.06.0-dev/binary-daemon/docker-containerd /usr/bin/docker-containerd
+ # cp /home/moby/bundles/17.06.0-dev/binary-daemon/docker-containerd-ctr /usr/bin/docker-containerd-ctr
+ # cp /home/moby/bundles/17.06.0-dev/binary-daemon/docker-containerd-shim /usr/bin/docker-containerd-shim
+ # cp /home/moby/bundles/17.06.0-dev/binary-daemon/docker-init /usr/bin/docker-init
+ # cp /home/moby/bundles/17.06.0-dev/binary-daemon/docker-proxy /usr/bin/docker-proxy
+
+
+
+6. Update the docker service
+ docker filesystem "devicemapper" is used for testing, udev sync is enabled or disabled based on different selection.
+
+udev sync enable is only supported by running dynamic binary docker server.
+
+udev sync will be disabled if running static binary docker server.
+
+
+Modify the file “/lib/systemd/system/docker.service”, replace the line starts with “ExecStart” as follows,
+
+devicemapper is used on my local machine, replace it with your storage option
+
+dynbinary is used on my local machine, replace it with your start method 
+ ExecStart=/home/moby/bundles/17.06.0-dev/dynbinary-daemon/dockerd -H fd:// --storage-driver=devicemapper
+
+
+or 
+ ExecStart=/home/moby/bundles/17.06.0-dev/binary-daemon/dockerd -H fd:// --storage-driver=devicemapper --storage-opt dm.override_udev_sync_check=true
+
+
+or 
+ ExecStart=/home/moby/bundles/17.06.0-dev/binary-daemon/dockerd -H fd:// --storage-driver=overlay
+
+
+Then reboot the system and test can be started after then. 
+
+[edit] Test 
+
+1. Run the container
+ Following command is used on my local machine for testing: 
+ /home/moby/bundles/17.06.0-dev/binary-daemon/docker run -it --device=/dev/dri/renderD128 --gpu-priority=50 --gpu-memory=10240 centos:7.2.1511 /bin/bash
+
+
+
+2. Check the result
+ “/sys/fs/cgroup/gpu/docker/xxx/” can be notified, xxx represents the contatiner ID on your host 
+ # cd /sys/fs/cgroup/gpu/docker/xxx/
+
+ # ls
+ cgroup.clone_children  cgroup.procs  gpu.max_mem_in_bytes  gpu.priority  notify_on_release  tasks
+
+ # cat gpu.priority
+ 50
+
+ # cat gpu.max_mem_in_bytes
+ 10240
+
