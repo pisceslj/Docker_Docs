@@ -70,9 +70,9 @@ index b1e28c9..11a207e 100644
 +	
 +	spin_lock(&file_priv->obj_stat_lock);
 +
-+	task = get_pid_task(file_priv->pid, PIDTYPE_PID);
++	task = get_pid_task(file_priv->pid, PIDTYPE_PID); //获取task的pid
 +	if (task) {
-+		if (file_priv->obj_mem + size > gpucg_get_max_mem(task)) {
++		if (file_priv->obj_mem + size > gpucg_get_max_mem(task)) {  //检查是否达到cgroup分配的最大memory
 +			ret = 1;
 +			DRM_DEBUG_DRIVER("ZHEN: hit max mem %d\n", task->pid);
 +		}
@@ -87,7 +87,7 @@ index b1e28c9..11a207e 100644
 +void drm_gem_obj_add_mem(struct drm_file *file_priv, u64 size)
 +{
 +	spin_lock(&file_priv->obj_stat_lock);
-+	file_priv->obj_mem += size;
++	file_priv->obj_mem += size;                //扩大对应对象的memory
 +	spin_unlock(&file_priv->obj_stat_lock);
 +}
 +EXPORT_SYMBOL(drm_gem_obj_add_mem);
@@ -95,7 +95,7 @@ index b1e28c9..11a207e 100644
 +void drm_gem_obj_del_mem(struct drm_file *file_priv, u64 size)
 +{
 +	spin_lock(&file_priv->obj_stat_lock);
-+	file_priv->obj_mem -= size;
++	file_priv->obj_mem -= size;               //缩减对应对象的memory
 +	spin_unlock(&file_priv->obj_stat_lock);
 +}
 +EXPORT_SYMBOL(drm_gem_obj_del_mem);
@@ -142,7 +142,7 @@ index 8bd0c49..7c7109b 100644
  		ctx->desc_template = default_desc_template(dev_priv, ppgtt);
  	}
  
-+	ctx->priority = gpucg_get_priority(current);
++	ctx->priority = gpucg_get_priority(current);    //获取当前任务的优先级
 +
  	trace_i915_context_create(ctx);
  
@@ -217,8 +217,8 @@ index 0000000..eb2c2ae
 +#ifndef CGROUP_GPU_H
 +#define CGROUP_GPU_H
 +
-+extern s64 gpucg_get_priority(struct task_struct *task);
-+extern u64 gpucg_get_max_mem(struct task_struct *task);
++extern s64 gpucg_get_priority(struct task_struct *task);   //获取任务的优先级
++extern u64 gpucg_get_max_mem(struct task_struct *task);    //获取任务内存上限
 +
 +#endif
 diff --git a/include/linux/cgroup_subsys.h b/include/linux/cgroup_subsys.h
@@ -293,52 +293,52 @@ index 0000000..12e77d9
 +
 +static DEFINE_MUTEX(gpucg_mutex);
 +
-+#define GPU_PRIO_MAX 1024 /* align with i915 now */
++#define GPU_PRIO_MAX 1024 /* align with i915 now */        //定义任务优先级范围
 +
 +static struct gpu_cgroup *css_gpucg(struct cgroup_subsys_state *css)
 +{
 +	return container_of(css, struct gpu_cgroup, css);
 +}
 +
-+static inline struct gpu_cgroup *get_current_gpucg(void)
++static inline struct gpu_cgroup *get_current_gpucg(void)   //获取当前gpu的cgroup
 +{
 +	return css_gpucg(task_get_css(current, gpu_cgrp_id));
 +}
 +
-+static inline struct gpu_cgroup *get_task_gpucg(struct task_struct *task)
++static inline struct gpu_cgroup *get_task_gpucg(struct task_struct *task)  //
 +{
 +	return css_gpucg(task_get_css(task, gpu_cgrp_id));
 +}
 +
-+static s64 gpu_css_get_prio(struct cgroup_subsys_state *css, struct cftype *cft)
++static s64 gpu_css_get_prio(struct cgroup_subsys_state *css, struct cftype *cft) //获取优先级
 +{
 +	struct gpu_cgroup *cg = css_gpucg(css);
 +
 +	return cg->prio;
 +}
 +
-+static int gpu_css_set_prio(struct cgroup_subsys_state *css, struct cftype *cft,
++static int gpu_css_set_prio(struct cgroup_subsys_state *css, struct cftype *cft, //设置优先级
 +			    s64 val)
 +{
 +	struct gpu_cgroup *cg = css_gpucg(css);
 +
-+	if (val > GPU_PRIO_MAX || val < -GPU_PRIO_MAX)
++	if (val > GPU_PRIO_MAX || val < -GPU_PRIO_MAX)  //超出优先级限制
 +		return -EINVAL;
 +	
 +	mutex_lock(&gpucg_mutex);
-+	cg->prio = val;
++	cg->prio = val;       			//赋值优先级
 +	mutex_unlock(&gpucg_mutex);
 +	return 0;
 +}
 +
-+static u64 gpu_css_get_max_mem(struct cgroup_subsys_state *css, struct cftype *cft)
++static u64 gpu_css_get_max_mem(struct cgroup_subsys_state *css, struct cftype *cft)  //获取最大memory
 +{
 +	struct gpu_cgroup *cg = css_gpucg(css);
 +
 +	return cg->max_mem_in_bytes;
 +}
 +
-+static int gpu_css_set_max_mem(struct cgroup_subsys_state *css, struct cftype *cft,
++static int gpu_css_set_max_mem(struct cgroup_subsys_state *css, struct cftype *cft,  //设置最大memory
 +			       u64 val)
 +{
 +	struct gpu_cgroup *cg = css_gpucg(css);
